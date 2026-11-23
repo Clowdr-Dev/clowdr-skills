@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Mailbox</title>
+<style>
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --line: #e2e1dc; --text: #1d1d1b; --muted: #6b6a64;
+  --accent: #2f5fd0; --sel: #eaf0fd; --warn: #b4441f; --ok: #2f7d4f; --pending: #a86d00;
+  --claude: #c96a3b; --codex: #2b2b2b; --antigravity: #2f72d6; --cursor: #6c4ad0; --dispatcher: #7a7a7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1d; --line: #33322f; --text: #ecebe6; --muted: #9b9a93;
+    --accent: #7ea2ff; --sel: #26304a; --warn: #f0875f; --ok: #6cc795; --pending: #e3b04b;
+    --codex: #d8d8d8; --dispatcher: #9a9a9a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+  background: var(--panel); }
+header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+header .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+.app { display: grid; grid-template-columns: 330px 1fr; height: calc(100% - 45px); }
+aside { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+main { overflow-y: auto; padding: 12px 16px 40px; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.toolbar input[type=search] { flex: 1; min-width: 180px; padding: 6px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); color: var(--text); padding: 6px 10px; font: inherit; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+label.chk { color: var(--muted); font-size: 13px; display: inline-flex; gap: 4px; align-items: center; }
+.agent { padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.agent:hover { background: var(--bg); }
+.agent.sel { background: var(--sel); }
+.agent .top { display: flex; align-items: center; gap: 6px; }
+.agent .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent .addr { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.agent .stats { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--dispatcher); }
+.badge { margin-left: auto; background: var(--warn); color: #fff; border-radius: 9px; font-size: 11px;
+  padding: 0 6px; font-weight: 600; }
+.pill { font-size: 11px; border: 1px solid var(--line); border-radius: 9px; padding: 0 6px; color: var(--muted); }
+.stale { opacity: .55; }
+.thread { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+.thread > .head { padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted);
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.msg { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.msg:last-child { border-bottom: 0; }
+.msg.reply { border-left: 3px solid var(--line); }
+.msg .line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.who { font-weight: 600; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+.who:hover { text-decoration: underline; }
+.arrow { color: var(--muted); }
+.id { color: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
+.time { color: var(--muted); font-size: 12px; margin-left: auto; }
+.st { font-size: 11px; border-radius: 9px; padding: 0 6px; border: 1px solid currentColor; }
+.st.unread { color: var(--warn); } .st.read { color: var(--ok); } .st.pending { color: var(--pending); }
+.st.err { color: var(--warn); } .st.deliv { color: var(--muted); }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; font-size: 13.5px; }
+.body.clip { max-height: 9.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); }
+.more { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 2px 0; font: inherit; font-size: 12px; }
+.error { color: var(--warn); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+.empty { color: var(--muted); padding: 30px; text-align: center; }
+.banner { background: var(--warn); color: #fff; padding: 6px 16px; font-size: 13px; display: none; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 40% 60%; }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent Mailbox</h1>
+  <span class="meta" id="meta">loading…</span>
+</header>
+<div class="banner" id="banner"></div>
+<div class="app">
+  <aside id="agents"></aside>
+  <main>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Search messages, addresses, labels">
+      <div class="seg" id="view">
+        <button data-v="threads" class="on">Threads</button><button data-v="timeline">Timeline</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="stale" checked> show inactive sessions</label>
+      <label class="chk"><input type="checkbox" id="live" checked> live</label>
+    </div>
+    <div id="list"></div>
+  </main>
+</div>
+<script>
+"use strict";
+const S = { agents: [], messages: [], total: 0, sel: null, view: "threads", q: "", open: new Set(), sig: "" };
+const $ = id => document.getElementById(id);
+const TOOL_COLORS = { claude: "--claude", codex: "--codex", antigravity: "--antigravity", cursor: "--cursor",
+  gemini: "--antigravity", grok: "--cursor", dispatcher: "--dispatcher" };
+const STALE_MS = 24 * 3600e3;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;   // all mailbox content goes in as text, never HTML
+  return e;
+}
+function tool(addr) { return String(addr).split(":")[0]; }
+function dot(addr) {
+  const d = el("span", "dot");
+  const v = TOOL_COLORS[tool(addr)];
+  if (v) d.style.background = `var(${v})`;
+  return d;
+}
+function agentOf(addr) { return S.agents.find(a => a.address === addr); }
+function shortAddr(addr) {
+  const i = addr.indexOf(":");
+  return i < 0 ? addr : addr.slice(0, i + 1) + addr.slice(i + 1, i + 9);
+}
+function nameOf(addr) {
+  const a = agentOf(addr);
+  return a && a.label ? `${a.label} (${shortAddr(addr)})` : shortAddr(addr);
+}
+function ago(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+}
+function stamp(iso) { return iso ? new Date(iso).toLocaleString() : ""; }
+
+function selectAgent(addr) {
+  S.sel = S.sel === addr ? null : addr;
+  render();
+}
+
+function renderAgents() {
+  const box = $("agents");
+  box.replaceChildren();
+  const showStale = $("stale").checked;
+  const all = el("div", "agent" + (S.sel ? "" : " sel"));
+  const t = el("div", "top"); t.append(el("span", "name", `All sessions (${S.agents.length})`));
+  all.append(t, el("div", "stats", `${S.total} messages`));
+  all.onclick = () => { S.sel = null; render(); };
+  box.append(all);
+  for (const a of S.agents) {
+    const stale = Date.now() - new Date(a.last_seen) > STALE_MS;
+    if (stale && !showStale && a.address !== S.sel) continue;
+    const row = el("div", "agent" + (a.address === S.sel ? " sel" : "") + (stale ? " stale" : ""));
+    row.title = a.address;
+    const top = el("div", "top");
+    top.append(dot(a.address), el("span", "name", a.label || a.tool));
+    if (a.unread) top.append(el("span", "badge", `${a.unread} unread`));
+    const stats = el("div", "stats");
+    stats.append(el("span", "pill", a.delivery || "pull"), el("span", null, `seen ${ago(a.last_seen)}`),
+      el("span", null, `↑${a.sent || 0} ↓${a.received || 0}`));
+    row.append(top, el("div", "addr", a.address), stats);
+    row.onclick = () => selectAgent(a.address);
+    box.append(row);
+  }
+}
+
+function matches(m) {
+  if (S.sel && m.sender !== S.sel && m.recipient !== S.sel) return false;
+  if (!S.q) return true;
+  const hay = [m.body, m.sender, m.recipient, `#${m.id}`, agentOf(m.sender)?.label, agentOf(m.recipient)?.label]
+    .join("\n").toLowerCase();
+  return hay.includes(S.q);
+}
+
+function who(addr) {
+  const w = el("span", "who");
+  w.append(dot(addr), document.createTextNode(nameOf(addr)));
+  w.title = addr;
+  w.onclick = e => { e.stopPropagation(); selectAgent(addr); };
+  return w;
+}
+
+function statusChips(m) {
+  const out = [];
+  out.push(m.read_at ? el("span", "st read", "acked") : el("span", "st unread", "unread"));
+  const ag = agentOf(m.recipient);
+  const push = ag && ["codex-queue", "antigravity-send", "cursor-resume"].includes(ag.delivery);
+  if (m.delivered_at) out.push(el("span", "st deliv", "delivered"));
+  else if (m.delivery_error) out.push(el("span", "st err", "delivery failed"));
+  else if (push && !m.read_at) out.push(el("span", "st pending", "awaiting delivery"));
+  return out;
+}
+
+function message(m, isReply) {
+  const box = el("div", "msg" + (isReply ? " reply" : ""));
+  const line = el("div", "line");
+  line.append(el("span", "id", `#${m.id}`), who(m.sender), el("span", "arrow", "→"), who(m.recipient),
+    ...statusChips(m));
+  if (m.reply_to) line.append(el("span", "id", `re #${m.reply_to}`));
+  const t = el("span", "time", ago(m.created_at));
+  t.title = `sent ${stamp(m.created_at)}` + (m.delivered_at ? `\ndelivered ${stamp(m.delivered_at)}` : "") +
+    (m.read_at ? `\nacked ${stamp(m.read_at)}` : "");
+  line.append(t);
+  box.append(line);
+  const body = el("div", "body", m.body);
+  const long = m.body.length > 700 || m.body.split("\n").length > 8;
+  if (long && !S.open.has(m.id)) body.classList.add("clip");
+  box.append(body);
+  if (long) {
+    const b = el("button", "more", S.open.has(m.id) ? "show less" : "show more");
+    b.onclick = () => { S.open.has(m.id) ? S.open.delete(m.id) : S.open.add(m.id); render(); };
+    box.append(b);
+  }
+  if (m.delivery_error && !m.delivered_at) {
+    box.append(el("div", "error", `delivery: ${m.delivery_error} (attempt ${m.delivery_attempts || 0})`));
+  }
+  return box;
+}
+
+function renderList() {
+  const list = $("list");
+  list.replaceChildren();
+  const shown = S.messages.filter(matches);
+  if (!shown.length) {
+    list.append(el("div", "empty", S.messages.length ? "No messages match." : "No messages yet."));
+    return;
+  }
+  if (S.view === "timeline") {
+    const card = el("div", "thread");
+    for (const m of shown.slice().reverse()) card.append(message(m, false));
+    list.append(card);
+    return;
+  }
+  const threads = new Map();
+  for (const m of S.messages) {
+    if (!threads.has(m.thread_id)) threads.set(m.thread_id, []);
+    threads.get(m.thread_id).push(m);
+  }
+  const keep = [...threads.values()].filter(ms => ms.some(matches));
+  keep.sort((a, b) => b[b.length - 1].id - a[a.length - 1].id);
+  for (const ms of keep) {
+    const card = el("div", "thread");
+    const head = el("div", "head");
+    const people = [...new Set(ms.flatMap(m => [m.sender, m.recipient]))];
+    head.append(el("span", null, `${ms.length} message${ms.length > 1 ? "s" : ""}`));
+    for (const p of people) head.append(who(p));
+    head.append(el("span", "time", `last ${ago(ms[ms.length - 1].created_at)}`));
+    card.append(head);
+    for (const m of ms) card.append(message(m, !!m.reply_to));
+    list.append(card);
+  }
+}
+
+function render() {
+  renderAgents();
+  renderList();
+  const sel = S.sel ? ` · showing ${nameOf(S.sel)}` : "";
+  const capped = S.total > S.messages.length ? ` (latest ${S.messages.length} loaded)` : "";
+  $("meta").textContent = `${S.agents.length} sessions · ${S.total} messages${capped}${sel} · updated ` +
+    new Date().toLocaleTimeString();
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    $("banner").style.display = "none";
+    const sig = JSON.stringify([data.agents, data.messages.length, data.messages.at(-1),
+      data.messages.map(m => [m.read_at, m.delivered_at, m.delivery_error])]);
+    S.agents = data.agents; S.messages = data.messages; S.total = data.total;
+    if (sig !== S.sig) { S.sig = sig; render(); }
+    else $("meta").textContent = $("meta").textContent.replace(/updated .*$/, "updated " + new Date().toLocaleTimeString());
+  } catch (e) {
+    $("banner").textContent = `Can't load the mailbox: ${e.message}`;
+    $("banner").style.display = "block";
+  }
+}
+
+$("q").addEventListener("input", e => { S.q = e.target.value.trim().toLowerCase(); renderList(); });
+$("stale").addEventListener("change", renderAgents);
+$("view").addEventListener("click", e => {
+  const v = e.target.dataset.v; if (!v) return;
+  S.view = v;
+  for (const b of $("view").children) b.classList.toggle("on", b.dataset.v === v);
+  renderList();
+});
+load();
+setInterval(() => { if ($("live").checked) load(); }, 3000);
+</script>
+</body>
+</html>

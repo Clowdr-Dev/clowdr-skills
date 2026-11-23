@@ -1,0 +1,8 @@
+mailbox.db
+mailbox.db-*
+__pycache__/
+dispatcher.log
+dispatcher.lock
+cursor-chats/
+cursor-worker/
+tests/.work/
